@@ -3,9 +3,9 @@ use std::{
     net::{self, TcpStream},
 };
 
-use crate::internal::request::request;
+use crate::internal::request;
 
-fn handle_connection(stream: &mut TcpStream) -> Result<Vec<u8>, Error> {
+fn process_request_data(stream: &mut TcpStream) -> Result<Vec<u8>, Error> {
     // read the stream into a buffer
     let mut reader = BufReader::new(stream);
 
@@ -28,9 +28,9 @@ pub fn listen_for_http() -> Result<(), Error> {
                 println!("====================");
                 println!("stream data received ");
 
-                let request_data = handle_connection(&mut data)?;
+                let request_data = process_request_data(&mut data)?;
 
-                let _ = request::process_request(&request_data);
+                let _ = request::parse(&request_data);
                 println!("Stream done processing");
             }
             Err(e) => {
