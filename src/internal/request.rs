@@ -1,3 +1,5 @@
+use crate::internal::body::parse_request_body;
+
 use super::headers::{Headers, parse_field_lines};
 use core::str;
 use std::io::{Error, ErrorKind};
@@ -72,7 +74,7 @@ pub struct Request {
 }
 
 impl Request {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Request {
             state: ParsingState::Init,
             method: None,
@@ -137,7 +139,11 @@ pub fn parse(request_data: &[u8]) -> Result<Request, Error> {
             }
             ParsingState::Header => {
                 println!("XXX");
-                let (headers, bytes_read) = parse_field_lines(&request_data[read..])?;
+                let (headers, bytes_read) =
+                    parse_field_lines(&request_data[read..]).map_err(|e| {
+                        request.state = ParsingState::Error;
+                        e
+                    })?;
 
                 println!("Headers");
                 for x in headers.iter() {
@@ -151,8 +157,14 @@ pub fn parse(request_data: &[u8]) -> Result<Request, Error> {
                 read += bytes_read;
             }
             ParsingState::Body => {
-                println!("Incomint");
-                break;
+                println!("Incoming");
+                let bytes_read = parse_request_body(&request_data[read..], &mut request).map_err(|e| {
+                    request.state = ParsingState::Error;
+                    e
+                }) ?;
+
+                read += bytes_read;
+                request.state = ParsingState::Done;
             }
             ParsingState::Error => todo!(),
             ParsingState::Done => todo!(),
