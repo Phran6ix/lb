@@ -3,7 +3,7 @@ use std::{
     net::{self, TcpStream},
 };
 
-use crate::internal::request;
+use crate::internal::{request, response::Response};
 
 fn process_request_data(stream: &mut TcpStream) -> Result<Vec<u8>, Error> {
     // read the stream into a buffer
@@ -31,6 +31,7 @@ pub fn listen_for_http() -> Result<(), Error> {
                 let request_data = process_request_data(&mut data)?;
 
                 let _ = request::parse(&request_data);
+                let _ = Response::ok(&mut data, None);
                 println!("Stream done processing");
             }
             Err(e) => {

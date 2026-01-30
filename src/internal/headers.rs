@@ -43,10 +43,6 @@ impl Headers {
 }
 
 fn is_token_char(byte: &u8) -> bool {
-    println!(
-        "current byte => {:?}",
-        String::from_utf8_lossy(&byte.to_be_bytes())
-    );
     match byte {
         b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' => true,
         b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.' | b'^' | b'_'

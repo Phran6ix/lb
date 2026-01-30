@@ -52,16 +52,16 @@ enum ParsingState {
 }
 
 impl ParsingState {
-    // To be used for logging purposes only
-    fn as_str(&self) -> &str {
-        match self {
-            ParsingState::Init => "init",
-            ParsingState::Header => "header",
-            ParsingState::Body => "body",
-            ParsingState::Error => "error",
-            ParsingState::Done => "done",
-        }
-    }
+    //  for logging purposes only
+    // fn as_str(&self) -> &str {
+    //     match self {
+    //         ParsingState::Init => "init",
+    //         ParsingState::Header => "header",
+    //         ParsingState::Body => "body",
+    //         ParsingState::Error => "error",
+    //         ParsingState::Done => "done",
+    //     }
+    // }
 }
 
 pub struct Request {
@@ -101,7 +101,7 @@ pub fn parse(request_data: &[u8]) -> Result<Request, Error> {
     // check the parsed data if there is a body required
 
     let mut request = Request::new();
-    loop {
+    while !request.is_done() {
         let idx = match request_data[read..]
             .windows(CRLF.len())
             .position(|r| r == CRLF)
@@ -113,7 +113,6 @@ pub fn parse(request_data: &[u8]) -> Result<Request, Error> {
         let end_of_line = read + idx;
         let curr_data = &request_data[read..end_of_line];
 
-        println!("current state => {:?}", request.state.as_str());
         match request.state {
             ParsingState::Init => {
                 match parse_request_line(curr_data) {
@@ -158,19 +157,22 @@ pub fn parse(request_data: &[u8]) -> Result<Request, Error> {
             }
             ParsingState::Body => {
                 println!("Incoming");
-                let bytes_read = parse_request_body(&request_data[read..], &mut request).map_err(|e| {
-                    request.state = ParsingState::Error;
-                    e
-                }) ?;
+                let bytes_read =
+                    parse_request_body(&request_data[read..], &mut request).map_err(|e| {
+                        request.state = ParsingState::Error;
+                        e
+                    })?;
 
                 read += bytes_read;
                 request.state = ParsingState::Done;
             }
             ParsingState::Error => todo!(),
-            ParsingState::Done => todo!(),
+            ParsingState::Done => {
+                println!("Processing request");
+                request.state = ParsingState::Done;
+                break;
+            }
         }
-
-        println!("Total read = {read}");
 
         // read the \r\n
     }
