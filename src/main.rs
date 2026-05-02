@@ -1,9 +1,10 @@
-use cmd::tcplistener;
+use cmd::tcplistener::listen_for_http;
 
 mod cmd;
 mod internal;
+mod framework;
 fn main() {
     println!("Hello, world!");
 
-    tcplistener::listen_for_http().expect("An error occured in TCP listener");
+    let _ = listen_for_http();
 }

@@ -16,7 +16,7 @@ impl Response {
     pub fn new(status_code: u16, status_text: &str, entity: Option<Vec<u8>>) -> Response {
         let mut headers: HashMap<String, String> = HashMap::new();
         headers.insert("Server".to_string(), "X-B-O-X".to_string());
-        headers.insert("Cmnnection".to_string(), "close".to_string());
+        headers.insert("Connection".to_string(), "close".to_string());
 
         if let Some(ref e) = entity {
             headers.insert("Content-Length".to_string(), e.len().to_string());
@@ -34,17 +34,17 @@ impl Response {
     }
 
     pub fn send(&self, stream: &mut impl Write) -> io::Result<()> {
-        // append the startling
+        // write the startline
         write!(
             stream,
             "{} {} {}\r\n",
             self.protocol, self.status_code, self.status_text
         )?;
-        // append the hash_map
+        // write the headers
         for (key, value) in &self.headers {
             write!(stream, "{}: {}\r\n", key, value)?;
         }
-        // append the CRLF after the headers
+        // write the CRLF after the headers
         write!(stream, "\r\n")?;
 
         //append the body if it exist
@@ -52,7 +52,7 @@ impl Response {
             stream.write_all(body)?;
         };
 
-        //send the data in buffer to stream
+        // force the bytes to be written to the socket(stream)
         stream.flush()
     }
 

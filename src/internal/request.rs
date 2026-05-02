@@ -137,7 +137,6 @@ pub fn parse(request_data: &[u8]) -> Result<Request, Error> {
                 };
             }
             ParsingState::Header => {
-                println!("XXX");
                 let (headers, bytes_read) =
                     parse_field_lines(&request_data[read..]).map_err(|e| {
                         request.state = ParsingState::Error;
@@ -156,7 +155,6 @@ pub fn parse(request_data: &[u8]) -> Result<Request, Error> {
                 read += bytes_read;
             }
             ParsingState::Body => {
-                println!("Incoming");
                 let bytes_read =
                     parse_request_body(&request_data[read..], &mut request).map_err(|e| {
                         request.state = ParsingState::Error;
@@ -166,9 +164,11 @@ pub fn parse(request_data: &[u8]) -> Result<Request, Error> {
                 read += bytes_read;
                 request.state = ParsingState::Done;
             }
-            ParsingState::Error => todo!(),
+            ParsingState::Error => {
+                println!("We are dealing with an error => ");
+                break;
+            },
             ParsingState::Done => {
-                println!("Processing request");
                 request.state = ParsingState::Done;
                 break;
             }
@@ -177,7 +177,6 @@ pub fn parse(request_data: &[u8]) -> Result<Request, Error> {
         // read the \r\n
     }
 
-    println!("DONE");
     Ok(request)
 }
 
@@ -190,7 +189,6 @@ fn parse_request_line(b: &[u8]) -> Result<(RequestMethod, String, String, usize)
     let mut read: usize = 0;
 
     let x: Vec<&[u8]> = b.split(|e| *e == SP).collect();
-    println!("after split => {x:?}");
     if x.len() != 3 {
         return Err(Error::new(
             ErrorKind::InvalidInput,
@@ -239,7 +237,6 @@ fn parse_request_line(b: &[u8]) -> Result<(RequestMethod, String, String, usize)
 
     read += b.len();
     read += 2;
-    println!("total read in start line => {}", read);
     Ok((request_method, target, version, read))
 }
 

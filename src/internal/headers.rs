@@ -85,6 +85,7 @@ pub fn parse_field_lines(bytes: &[u8]) -> Result<(Headers, usize), Error> {
 
         // .all breaks if it encounters a false value
         let is_valid_field_name = field_name.iter().all(is_token_char);
+        println!("{is_valid_field_name}");
         if !is_valid_field_name {
             println!(
                 "Invalid field name {:?}",
