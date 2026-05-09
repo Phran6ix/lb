@@ -1,9 +1,9 @@
 use std::io::{Error, ErrorKind};
 
-use crate::framework::{
+use crate::{framework::{
     radix::radix_node::{AllowedMethods, RadixNode},
     router::Handler,
-};
+}, internal::request};
 
 pub struct RadixTrie {
     root_node: RadixNode,
@@ -19,7 +19,6 @@ impl RadixTrie {
     pub fn get_root_node(&self) -> &RadixNode {
         &self.root_node
     }
-
     pub fn insert(
         &mut self,
         request_path: &str,
@@ -42,13 +41,10 @@ impl RadixTrie {
 
         let mut node: &mut RadixNode = &mut self.root_node;
         let path = Self::normalize_path(request_path);
-        println!("Original Path => {path}");
-        // let mut prefixes: &str = "";
-
-        let mut match_child_node_index: Option<usize> = None;
 
         // This gets updated per loop, so that the prefix check works
         let mut u_path: &str = path;
+
         // Used to slice the u_path
         let mut prefix_len: usize = 0;
         let mut partial_prefix: bool = false;
@@ -58,111 +54,82 @@ impl RadixTrie {
         // This is loop purpose is to get the node to add the child node. it breaks when it
         // encounters one of the three conditions
 
-        let mut done: bool = false;
-        
+        // let mut done: bool = false;
 
         'outer: loop {
             // DEAD END CONDITION
-            println!("U_PATH => {u_path}");
             u_path = Self::strip_slash_prefix(u_path);
-            if node.child_nodes.len() < 1 {
-                println!("checking node => {}, inserting => {}", node.path, u_path);
+            if node.child_nodes.is_empty() {
                 let node_path = Self::add_slash_suffix(u_path);
                 let mut child_node = RadixNode::new(node_path);
 
-                if method.is_some() && handler.is_some() {
-                    if let (Some(m), Some(h)) = (method, handler)
-                        && let Err(e) = child_node.add_method(m, h)
-                    {
-                        eprintln!("{:?}", e);
-                        break;
-                    }
-                };
+                if let Some((m, h)) = method.zip(handler)
+                    && let Err(e) = child_node.add_method(m, h)
+                {
+                    eprintln!("{:?}", e);
+                    break;
+                }
                 node.add_child_node(child_node);
-                let node_child = &node.get_children()[0];
-                println!("Child => {}", node_child.path);
 
                 return;
             }
 
+            let mut matched_any: bool = false;
             for (i, child) in node.child_nodes.iter().enumerate() {
-                println!(
-                    "checking the node path ( {} ) against the input {}",
-                    child.path, u_path
-                );
-                // println!("{i}, {}", node.child_nodes.len());
-
                 match Self::get_prefix_between_two_strings(u_path, &child.path) {
                     Ok(Some(_prefix)) => {
-                        match_child_node_index = Some(i);
+                        matched_any = true;
                         prefix_len = _prefix.len();
 
                         // Perfect Match
                         if prefix_len == child.path.len() && prefix_len == u_path.len() {
-                            println!("This is a perfect fxking match");
                             perfect_match = Some(i);
-
-                            done = true;
                             break;
-                        }
-
-                        // 1. complete prefix
-                        if prefix_len == child.path.len() {
-                            done = false;
-                        // 2. partial prefix
+                        } else if prefix_len == child.path.len() {
+                            u_path = &u_path[prefix_len..];
+                            node = &mut node.child_nodes[i];
+                            break;
                         } else {
                             partial_prefix = true;
-                            done = true;
+                            u_path = &u_path[prefix_len..];
+                            node = &mut node.child_nodes[i];
+                            break;
                         }
-
-                        u_path = &u_path[prefix_len..];
-                        node = &mut node.child_nodes[i];
-
-                        break;
                     }
                     Ok(None) => {
-                        println!("NO MORE PREFIX");
-                        match_child_node_index = None;
                         prefix_len = 0;
-                        done = true;
-                        println!("No prefix, move to the next child");
+                        // done = true;
                         continue;
                     }
                     Err(e) => {
-                        done = true;
-                        println!("Cannot perform prefix operation => {:?}", e);
+                        eprintln!("{e}");
                         break;
                     }
                 };
             }
 
-            if done {
+            if !matched_any || partial_prefix || perfect_match.is_some() {
                 break 'outer;
             }
         }
 
         if let Some(perfect_match_index) = perfect_match {
-            println!("Handle perfect match");
             let perfect_match_node = &mut node.child_nodes[perfect_match_index];
             if let Some((m, h)) = method.zip(handler)
                 && let Err(e) = perfect_match_node.add_method(m, h)
             {
                 eprintln!("{}", e);
-                return;
             }
             return;
         }
 
         if partial_prefix {
-            println!("PARTIAL PREFIX => {u_path}");
             let splitoff_path = node.path[prefix_len..].to_string();
             let way_path = node.path[..prefix_len].to_string();
 
-            println!("splitoff => {}, waypath => {}", splitoff_path, way_path);
-
             let mut splitoff_node = RadixNode::new(Self::add_slash_suffix(&splitoff_path));
 
-            if node.child_nodes.len() > 0 {
+            if !node.child_nodes.is_empty() {
                 node.handover_children(&mut splitoff_node);
             }
 
@@ -174,11 +141,10 @@ impl RadixTrie {
 
             node.update_node_path(&way_path);
 
-            if u_path != "" {
-                println!("new nodeee");
+            if !u_path.is_empty() {
                 let mut new_node = RadixNode::new(Self::add_slash_suffix(u_path));
 
-                if let (Some(m), Some(h)) = (method, handler)
+                if let Some((m, h)) = method.zip(handler)
                     && let Err(e) = new_node.add_method(m, h)
                 {
                     println!("{}", e);
@@ -188,12 +154,6 @@ impl RadixTrie {
 
             node.add_child_node(splitoff_node);
         } else {
-            println!("Perfect match");
-            println!(
-                "We are dealing with this node {}, to insert {}",
-                node.path, u_path
-            );
-
             let mut new_node = RadixNode::new(Self::add_slash_suffix(u_path));
             if let Some((m, h)) = method.zip(handler)
                 && let Err(e) = new_node.add_method(m, h)
@@ -204,13 +164,10 @@ impl RadixTrie {
             node.add_child_node(new_node);
         };
 
-        println!(
-            "prefix length {} \n child index {:?} \n path {} \n node path {}",
-            prefix_len, match_child_node_index, path, node.path
-        );
-        println!("==================================================");
         return;
     }
+
+    pub fn search(&self, request_path: &str, method: Option<AllowedMethods>) -> Result<Handler, String> {}
 
     pub fn get_prefix_between_two_strings(
         str_1: &str,
@@ -259,7 +216,7 @@ impl RadixTrie {
         stripped
     }
 
-    pub fn normalize_path(path: &str) -> &str {
+    fn normalize_path(path: &str) -> &str {
         if path == "/" {
             return path;
         }

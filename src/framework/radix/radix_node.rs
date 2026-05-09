@@ -67,7 +67,7 @@ impl RadixNode {
 
     pub fn handover_method(&mut self, handover_to: &mut RadixNode) {
         // Rust will not allow an Option be empty at any time, even for a millisecond.
-        // Which was the . take() method is for, it will transfer ownership and replace the
+        // Which was the .take() method is for, it will transfer ownership and replace the
         // Option variable by None
         //
         // // handover_to.methods = self.methods;
