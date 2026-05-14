@@ -1,9 +1,25 @@
-use std::io::{Error, ErrorKind};
+use std::{
+    collections::HashMap,
+    io::{Error, ErrorKind},
+};
 
-use crate::{framework::{
+use crate::framework::{
     radix::radix_node::{AllowedMethods, RadixNode},
     router::Handler,
-}, internal::request};
+};
+
+#[derive(Debug)]
+pub enum RouterError {
+    MethodNotFound,
+    RouteNotFound,
+}
+
+#[derive(Debug)]
+pub struct RouteMatch<'a> {
+    pub handler: &'a Handler,
+    pub query: HashMap<String, String>,
+    pub params: HashMap<String, String>,
+}
 
 pub struct RadixTrie {
     root_node: RadixNode,
@@ -40,10 +56,10 @@ impl RadixTrie {
         //    split at this point
 
         let mut node: &mut RadixNode = &mut self.root_node;
-        let path = Self::normalize_path(request_path);
+        let path = &Self::normalize(request_path);
 
         // This gets updated per loop, so that the prefix check works
-        let mut u_path: &str = path;
+        let mut u_path: &str = &path;
 
         // Used to slice the u_path
         let mut prefix_len: usize = 0;
@@ -58,7 +74,7 @@ impl RadixTrie {
 
         'outer: loop {
             // DEAD END CONDITION
-            u_path = Self::strip_slash_prefix(u_path);
+
             if node.child_nodes.is_empty() {
                 let node_path = Self::add_slash_suffix(u_path);
                 let mut child_node = RadixNode::new(node_path);
@@ -78,6 +94,19 @@ impl RadixTrie {
             for (i, child) in node.child_nodes.iter().enumerate() {
                 match Self::get_prefix_between_two_strings(u_path, &child.path) {
                     Ok(Some(_prefix)) => {
+                        if _prefix.starts_with(':') && child.path.starts_with(':') {
+                            let u_param_name = u_path.split('/').next().unwrap();
+                            let child_param_name = child.path.split('/').next().unwrap();
+
+                            if u_param_name != child_param_name {
+                                panic!(
+                                    "Error: Conflicting parameter names at the same route level. \
+             You already registered '{}', but you are trying to insert '{}'. \
+             Full path: {}",
+                                    child_param_name, u_param_name, &request_path
+                                );
+                            }
+                        }
                         matched_any = true;
                         prefix_len = _prefix.len();
 
@@ -167,7 +196,119 @@ impl RadixTrie {
         return;
     }
 
-    pub fn search(&self, request_path: &str, method: Option<AllowedMethods>) -> Result<Handler, String> {}
+    pub fn search(
+        &self,
+        request_path: &str,
+        method: AllowedMethods,
+    ) -> Result<RouteMatch<'_>, RouterError> {
+        // Step 1: Normalize the string, all url must end with a / since that is the normalizing
+        // logic that the insert works with.
+
+        let query_index = request_path.split_once('?');
+        let (path_string, query_string) = match query_index {
+            Some((p, q)) => (p, Some(q)),
+            None => (request_path, None),
+        };
+        let normalized_path: String = Self::add_slash_suffix(path_string);
+        let mut path: &str = &Self::strip_slash_prefix(&normalized_path);
+
+        // step 2: Loop: Traverse the trie and look for diveregent - where the url and trie are prefix,
+        // break the request path and traverse with the suffix
+        // // Consider special patterns, eg dynamic param (xxx/:id) - determine the order of
+        // pattern matching
+
+        let mut matched_any: bool = false;
+
+        let mut params_vec: Vec<(&str, &str)> = Vec::new();
+
+        let mut node: &RadixNode = &self.root_node;
+        // let mut fork_path: Option<String> = None;
+
+        let mut param_node: Option<&RadixNode> = None;
+        'outer: loop {
+            let children = node.get_children();
+
+            for child in children.iter() {
+                if child.path.starts_with(':') {
+                    matched_any = false;
+                    param_node = Some(child);
+                    continue;
+                }
+
+                match path.strip_prefix(&child.path) {
+                    Some(remaining_path) => {
+                        node = child;
+                        path = remaining_path;
+
+                        matched_any = true;
+                    }
+                    None => {
+                        matched_any = false;
+                        continue;
+                    }
+                };
+            }
+
+            if path == "/" && !matched_any {
+                return Err(RouterError::RouteNotFound);
+            }
+
+            // if there was a match in the search, return the value
+            if !matched_any {
+                if let Some(p_node) = param_node {
+                    let param_end_at = path.find("/").unwrap_or(path.len());
+                    let p_node_path = &p_node.path[1..];
+
+                    let param_key = match p_node_path.strip_suffix('/') {
+                        Some(key) => key,
+                        None => p_node_path,
+                    };
+                    println!("hte param key {param_key}",);
+
+                    let param_value = &path[..param_end_at];
+
+                    params_vec.push((&param_key, param_value));
+
+                    node = p_node;
+                    path = &path[param_end_at..];
+                } else {
+                    break 'outer;
+                }
+            };
+
+            if path.is_empty() || node.child_nodes.is_empty() || path == "/" {
+                break 'outer;
+            }
+        }
+
+        let Some(methods) = &node.methods else {
+            return Err(RouterError::RouteNotFound);
+        };
+
+        let Some(handler) = methods.get(&method) else {
+            return Err(RouterError::MethodNotFound);
+        };
+
+        let query: HashMap<String, String> = match query_string {
+            None => HashMap::new(),
+            Some(q) => q
+                .split("&")
+                .filter_map(|pair| pair.split_once("="))
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        };
+
+        let params: HashMap<String, String> = params_vec
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+
+        Ok(RouteMatch {
+            handler,
+            query,
+            params,
+        })
+    }
 
     pub fn get_prefix_between_two_strings(
         str_1: &str,
@@ -216,11 +357,16 @@ impl RadixTrie {
         stripped
     }
 
-    fn normalize_path(path: &str) -> &str {
-        if path == "/" {
-            return path;
+    fn normalize(node_path: &str) -> String {
+        let path: String;
+        if !node_path.ends_with("/") {
+            path = format!("{}/", node_path);
+        } else {
+            path = node_path.to_string();
         }
 
-        path.trim_end_matches("/")
+        let x = Self::strip_slash_prefix(&path);
+
+        x.to_string()
     }
 }
