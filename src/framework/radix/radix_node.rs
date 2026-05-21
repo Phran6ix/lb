@@ -3,16 +3,7 @@ use std::{
     // fmt::format,
 };
 
-use crate::framework::router::Handler;
-
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum AllowedMethods {
-    GET,
-    POST,
-    PATCH,
-    DELETE,
-    PUT,
-}
+use crate::framework::{AllowedMethods, router::router::Handler};
 
 #[derive(Debug, Clone)]
 pub struct RadixNode {
@@ -23,11 +14,12 @@ pub struct RadixNode {
 }
 
 impl RadixNode {
-    pub fn new(path: String) -> Self {
-        let param: bool = path.contains(':');
+    pub fn new<S: Into<String>>(path: S) -> Self {
+        let p: String = path.into();
+        let param: bool = p.contains(':');
 
         RadixNode {
-            path,
+            path: p,
             child_nodes: vec![],
             methods: None,
             param,
@@ -44,7 +36,7 @@ impl RadixNode {
 
         match method_map.entry(method) {
             Entry::Occupied(_) => Err(format!(
-                "Method {:?} already exists on route {:?}",
+                "Method {:?} already exists on route {}",
                 method, self.path
             )),
             Entry::Vacant(vacant_entry) => {
@@ -60,6 +52,7 @@ impl RadixNode {
 
     pub fn handover_children(&mut self, handover_to: &mut RadixNode) {
         // append the child nodes to the new nodes
+        handover_to.child_nodes.reserve(self.child_nodes.len());
         handover_to.child_nodes.append(&mut self.child_nodes);
         // clear the child nodes of the current node
         self.child_nodes.clear();
@@ -94,5 +87,199 @@ impl RadixNode {
 
     pub fn set_param(&mut self, param: bool) {
         self.param = param
+    }
+}
+
+#[cfg(test)]
+mod radix_node {
+    use crate::internal::{request::Request, response::Response};
+
+    use super::*;
+
+    fn handler(_r: &Request) -> Response {
+        Response::new(200, "OK", None)
+    }
+
+    fn setup_node() -> RadixNode {
+        RadixNode::new("/")
+    }
+
+    #[test]
+    fn test_create_radix_node_without_param() {
+        let new_node = RadixNode::new("/new");
+        assert_eq!(new_node.path, "/new");
+        assert!(new_node.methods.is_none());
+        assert!(!new_node.param);
+    }
+
+    #[test]
+    fn test_create_radix_node_with_param() {
+        let new_node = RadixNode::new("/:new");
+
+        assert_eq!(new_node.path, "/:new");
+        assert!(new_node.methods.is_none());
+
+        assert!(new_node.param)
+    }
+
+    #[test]
+    fn test_add_a_child_node_to_radix_node() {
+        let mut node = setup_node();
+
+        let child_node = RadixNode::new("/example");
+        node.add_child_node(child_node);
+
+        assert_eq!(node.child_nodes.len(), 1);
+        let node_1 = node.child_nodes.get(0);
+        assert!(node_1.is_some());
+
+        if let Some(n) = node_1 {
+            assert_eq!(n.path, "/example");
+            assert!(n.methods.is_none());
+            assert!(!n.param);
+        }
+    }
+
+    #[test]
+    fn test_add_multiple_child_nodes() {
+        let mut node = setup_node();
+        let child_node_1 = RadixNode::new("/example_one");
+        let child_node_2 = RadixNode::new("/example_two");
+        let child_node_3 = RadixNode::new("/example_three");
+
+        node.add_child_node(child_node_1);
+        node.add_child_node(child_node_2);
+        node.add_child_node(child_node_3);
+
+        assert_eq!(node.child_nodes.len(), 3);
+    }
+
+    #[test]
+    fn test_add_child_node_with_method() {
+        let mut node = setup_node();
+
+        let child_node = RadixNode {
+            path: "/example".to_string(),
+            child_nodes: vec![],
+            methods: Some(HashMap::from([(AllowedMethods::PATCH, handler as Handler)])),
+            param: false,
+        };
+
+        node.add_child_node(child_node);
+
+        assert_eq!(node.child_nodes.len(), 1);
+
+        let Some(child) = node.child_nodes.get(0) else {
+            panic!("TestFailed: No child node at index 0");
+        };
+
+        let Some(method) = &child.methods else {
+            panic!("TestFailed: No Method is attached ")
+        };
+
+        assert!(
+            method.contains_key(&AllowedMethods::PATCH),
+            "Expected PATCH method to be registerd in node."
+        );
+    }
+
+    #[test]
+    fn test_add_method() {
+        let mut node = RadixNode::new("/add_method");
+
+        if let Err(e) = node.add_method(AllowedMethods::DELETE, handler) {
+            panic!("TestFailed: Method was not inserted: {:?}", e)
+        };
+
+        let Some(method) = node.methods else {
+            panic!("TestFailed: No method is registered on node");
+        };
+
+        assert!(method.get(&AllowedMethods::DELETE).is_some())
+    }
+
+    #[test]
+    fn test_add_duplicate_method() {
+        let mut node = RadixNode::new("/add_method");
+
+        node.add_method(AllowedMethods::DELETE, handler).unwrap();
+
+        let Err(actual_error) = node.add_method(AllowedMethods::DELETE, handler) else {
+            panic!("Error expxected. ")
+        };
+
+        assert_eq!(
+            actual_error,
+            "Method DELETE already exists on route /add_method"
+        )
+    }
+
+    #[test]
+    fn test_handover_children() {
+        let mut node = setup_node();
+        let node_1 = RadixNode::new("/node_one");
+        let node_2 = RadixNode::new("/node_two");
+        let node_3 = RadixNode::new("/node_three");
+
+        node.add_child_node(node_1);
+        node.add_child_node(node_2);
+        node.add_child_node(node_3);
+
+        assert_eq!(node.child_nodes.len(), 3);
+
+        let mut new_node = RadixNode::new("/new_node");
+        assert_eq!(new_node.child_nodes.len(), 0);
+
+        node.handover_children(&mut new_node);
+        assert_eq!(node.child_nodes.len(), 0);
+        assert_eq!(new_node.child_nodes.len(), 3)
+    }
+
+    #[test]
+    fn test_handover_method() {
+        let mut node = RadixNode::new("/handover");
+        node.add_method(AllowedMethods::PUT, handler).unwrap();
+        node.add_method(AllowedMethods::GET, handler).unwrap();
+        node.add_method(AllowedMethods::POST, handler).unwrap();
+
+        assert!(node.methods.is_some());
+        let Some(methods) = &node.methods else {
+            panic!("TestFailed: Expected a some value");
+        };
+
+        assert_eq!(methods.len(), 3);
+
+        let mut new_node = RadixNode::new("/handover_to");
+        assert!(new_node.methods.is_none());
+
+        node.handover_method(&mut new_node);
+        assert!(node.methods.is_none());
+        let Some(new_methods) = &new_node.methods else {
+            panic!("TestFailed: Expecting new methods");
+        };
+
+        assert_eq!(new_methods.len(), 3);
+        assert!(new_methods.contains_key(&AllowedMethods::GET));
+        assert!(new_methods.contains_key(&AllowedMethods::POST));
+        assert!(new_methods.contains_key(&AllowedMethods::PUT));
+    }
+
+    #[test]
+    fn test_update_node_path() {
+        let mut node = RadixNode::new("/prev");
+
+        assert_eq!(node.path, "/prev");
+
+        node.update_node_path("/new_path");
+        assert_eq!(node.path, "/new_path");
+    }
+
+    #[test]
+    fn test_set_param() {
+        let mut node = RadixNode::new("/prev");
+        assert_eq!(node.param, false);
+
+        node.set_param(true);
+        assert_eq!(node.param, true);
     }
 }

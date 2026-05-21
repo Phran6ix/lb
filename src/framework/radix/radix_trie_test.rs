@@ -1,4 +1,4 @@
-use crate::framework::radix::radix_node::AllowedMethods;
+use crate::framework::AllowedMethods;
 use crate::internal::{request::Request, response::Response};
 
 use crate::framework::radix::radix_trie::{RadixTrie, RouterError};
@@ -189,7 +189,7 @@ fn test_radix_trie_search_with_param_and_query_input() {
     let trie = trie_setup();
     let search_key = "/api/users/99?limit=60&active=true&sort=desc";
 
-    let result = trie.search(search_key,AllowedMethods::GET ) ;
+    let result = trie.search(search_key, AllowedMethods::GET);
     assert!(result.is_ok());
     let route_match = result.unwrap();
     let route_param = route_match.params;
@@ -204,18 +204,18 @@ fn test_radix_trie_search_with_param_and_query_input() {
 fn test_radix_trie_search_invalid_route() {
     let trie = trie_setup();
     let search_key = "/api/ghost/single";
-    let result  = trie.search(search_key, AllowedMethods::DELETE);
+    let result = trie.search(search_key, AllowedMethods::DELETE);
 
     assert!(result.is_err());
     assert!(matches!(result, Err(RouterError::RouteNotFound)));
 }
 
 #[test]
-fn test_radix_trie_search_invalid_method () {
+fn test_radix_trie_search_invalid_method() {
     let trie = trie_setup();
     let search_key = "/api/users";
-    let result  = trie.search(search_key, AllowedMethods::DELETE);
+    let result = trie.search(search_key, AllowedMethods::DELETE);
 
     assert!(result.is_err());
-    assert!(matches!( result , Err(RouterError::MethodNotFound)));
+    assert!(matches!(result, Err(RouterError::MethodNotFound)));
 }

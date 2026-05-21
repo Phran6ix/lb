@@ -37,7 +37,7 @@ impl Headers {
             .or_insert_with(|| v.to_string());
     }
 
-    pub fn iter(&self) -> Iter<String, String> {
+    pub fn iter(&self) -> Iter<'_, String, String> {
         self.inner.iter()
     }
 }

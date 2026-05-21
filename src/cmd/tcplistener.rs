@@ -3,7 +3,8 @@ use std::{
     net::{self, TcpStream},
 };
 
-use crate::internal::{request, response::Response};
+use lb::{Response, internal::request};
+// use crate::{request, response::Response};
 
 fn process_request_data(stream: &mut TcpStream) -> Result<Vec<u8>, Error> {
     // read the stream into a buffer

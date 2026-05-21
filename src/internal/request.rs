@@ -2,6 +2,7 @@ use crate::internal::body::parse_request_body;
 
 use super::headers::{Headers, parse_field_lines};
 use core::str;
+use std::collections::HashMap;
 use std::io::{Error, ErrorKind};
 use std::str::FromStr;
 
@@ -71,6 +72,8 @@ pub struct Request {
     pub headers: Option<Headers>,
     pub path: Option<String>,
     pub body: Vec<u8>,
+    pub param: Option<HashMap<String, String>>,
+    pub query: Option<HashMap<String, String>>,
 }
 
 impl Request {
@@ -82,11 +85,41 @@ impl Request {
             path: None,
             headers: None,
             body: vec![],
+            param: None,
+            query: None,
         }
     }
 
     fn is_done(&self) -> bool {
         self.state == ParsingState::Error || self.state == ParsingState::Done
+    }
+
+   pub fn set_param(&mut self, param: HashMap<String, String>) -> &mut Self {
+        if param.is_empty() {
+            return self;
+        }
+        let Some(req_params) = &mut self.param else {
+            self.param = Some(param);
+            return self;
+        };
+
+        req_params.reserve(param.len());
+        req_params.extend(param);
+        self
+    }
+
+ pub   fn set_query(&mut self, query: HashMap<String, String>) -> &mut Self {
+        if query.is_empty() {
+            return self;
+        }
+        let Some(req_querys) = &mut self.query else {
+            self.query = Some(query);
+            return self;
+        };
+
+        req_querys.reserve(query.len());
+        req_querys.extend(query);
+        self
     }
 }
 
@@ -167,7 +200,7 @@ pub fn parse(request_data: &[u8]) -> Result<Request, Error> {
             ParsingState::Error => {
                 println!("We are dealing with an error => ");
                 break;
-            },
+            }
             ParsingState::Done => {
                 request.state = ParsingState::Done;
                 break;

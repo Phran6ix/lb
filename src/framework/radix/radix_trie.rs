@@ -1,17 +1,24 @@
+use core::fmt;
 use std::{
     collections::HashMap,
     io::{Error, ErrorKind},
 };
 
-use crate::framework::{
-    radix::radix_node::{AllowedMethods, RadixNode},
-    router::Handler,
-};
+use crate::framework::{AllowedMethods, radix::radix_node::RadixNode, router::router::Handler};
 
 #[derive(Debug)]
 pub enum RouterError {
     MethodNotFound,
     RouteNotFound,
+}
+
+impl fmt::Display for RouterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RouterError::MethodNotFound => write!(f, "405: Method Not Allowed"),
+            RouterError::RouteNotFound => write!(f, "404: Route Not Found"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -40,7 +47,7 @@ impl RadixTrie {
         request_path: &str,
         method: Option<AllowedMethods>,
         handler: Option<Handler>,
-    ) {
+    ) -> Result<(), String> {
         // To insert
         // Start from the root node
         // traverse down the tree based on the path  <----|
@@ -87,7 +94,7 @@ impl RadixTrie {
                 }
                 node.add_child_node(child_node);
 
-                return;
+                return Ok(());
             }
 
             let mut matched_any: bool = false;
@@ -148,8 +155,9 @@ impl RadixTrie {
                 && let Err(e) = perfect_match_node.add_method(m, h)
             {
                 eprintln!("{}", e);
+                return Err(String::from(e));
             }
-            return;
+            return Ok(());
         }
 
         if partial_prefix {
@@ -188,12 +196,14 @@ impl RadixTrie {
                 && let Err(e) = new_node.add_method(m, h)
             {
                 println!("{}", e);
+                return Err(String::from(e));
             }
 
             node.add_child_node(new_node);
+            return Ok(());
         };
 
-        return;
+        return Ok(());
     }
 
     pub fn search(
@@ -217,16 +227,14 @@ impl RadixTrie {
         // // Consider special patterns, eg dynamic param (xxx/:id) - determine the order of
         // pattern matching
 
-        let mut matched_any: bool = false;
-
         let mut params_vec: Vec<(&str, &str)> = Vec::new();
-
         let mut node: &RadixNode = &self.root_node;
-        // let mut fork_path: Option<String> = None;
 
-        let mut param_node: Option<&RadixNode> = None;
         'outer: loop {
             let children = node.get_children();
+
+            let mut param_node: Option<&RadixNode> = None;
+            let mut matched_any: bool = false;
 
             for child in children.iter() {
                 if child.path.starts_with(':') {
@@ -241,10 +249,10 @@ impl RadixTrie {
                         path = remaining_path;
 
                         matched_any = true;
+                        break;
                     }
                     None => {
                         matched_any = false;
-                        continue;
                     }
                 };
             }
@@ -263,8 +271,6 @@ impl RadixTrie {
                         Some(key) => key,
                         None => p_node_path,
                     };
-                    println!("hte param key {param_key}",);
-
                     let param_value = &path[..param_end_at];
 
                     params_vec.push((&param_key, param_value));
