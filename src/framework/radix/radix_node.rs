@@ -72,6 +72,52 @@ impl RadixNode {
         self.path = new_path.to_string();
     }
 
+    pub fn insert_param_node(
+        &mut self,
+        path: &str,
+        param_idx_start_at: usize,
+    ) -> Result<( &mut Self, usize ), String> {
+        if param_idx_start_at > 0 {
+            let path_bytes = path.as_bytes();
+            if path_bytes[param_idx_start_at - 1] != b'/' {
+                return Err(format!(
+                    "Syntax Error: Dynamic parameter ':' at position {} must be preceded by a forward slash '/' (e.g., '/:id')",
+                    param_idx_start_at - 1
+                ));
+            }
+        }
+
+        let mut param_idx_end_at: usize = path[param_idx_start_at..]
+            .find("/")
+            .map(|idx| param_idx_start_at + idx)
+            .unwrap_or(path.len());
+
+        if param_idx_end_at < path.len() && path.as_bytes()[param_idx_end_at] == b'/' {
+            param_idx_end_at += 1;
+        }
+
+        let param_path = &path[param_idx_start_at..param_idx_end_at];
+        // println!("param path vs node path", );
+        //
+        // if param_path == self.path {
+        //     println!("We are equal o");
+        // }
+
+        let path_before_param = &path[..param_idx_start_at];
+        let mut param_node = RadixNode::new(param_path.to_string());
+
+        param_node.set_param(true);
+        let target_node = if !path_before_param.is_empty() {
+            self.add_child_node(RadixNode::new(path_before_param.to_string()));
+            self.child_nodes.last_mut().unwrap()
+        } else {
+            self
+        };
+
+        target_node.add_child_node(param_node);
+        return Ok(( target_node.child_nodes.last_mut().unwrap(), param_idx_end_at ));
+    }
+
     pub fn print(&self, depth: usize) {
         let indent = "   ".repeat(depth);
 

@@ -10,7 +10,7 @@ pub struct Router {
 }
 
 impl Router {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Router {
             trie: RadixTrie::new(),
         }
@@ -37,6 +37,10 @@ impl Router {
             .insert(path, Some(AllowedMethods::DELETE), Some(handler))
     }
 
+    pub fn show_routes(&self) {
+        self.trie.get_root_node().print(3);
+    }
+
     pub fn resolve_path(
         &mut self,
         req: &mut Request,
@@ -54,12 +58,4 @@ impl Router {
 
         Ok(*route.handler)
     }
-}
-
-#[cfg(test)]
-mod router_test {
-    use super::*;
-
-    #[test]
-    fn test_router() {}
 }

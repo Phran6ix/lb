@@ -1,1 +1,3 @@
-pub mod router; 
+pub mod router;
+
+pub use router::{Handler, Router};

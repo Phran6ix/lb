@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt::{Debug},
     io::{self, Write},
 };
 
@@ -10,6 +11,16 @@ pub struct Response {
     pub status_text: String,
     pub headers: HashMap<String, String>,
     pub entity: Option<Vec<u8>>,
+}
+
+impl Debug for Response {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "\n status code:  {} \n status Text: {} \n headers: {:?}",
+            self.status_code, self.status_text, self.headers
+        )
+    }
 }
 
 impl Response {

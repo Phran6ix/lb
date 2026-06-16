@@ -61,6 +61,9 @@ impl RadixTrie {
         // 2. (PERFECT MATCH)it has traverse the trie to a an existing node that is a path to a valid node
         // 3.  (FORK IN THE ROAD)partial match, eg /users and /uploads -> both have a prefix of (u) -> so it must
         //    split at this point
+        //
+        //
+        //    RULE: only nodes with end slash can hold both method and children
 
         let mut node: &mut RadixNode = &mut self.root_node;
         let path = &Self::normalize(request_path);
@@ -81,23 +84,42 @@ impl RadixTrie {
 
         'outer: loop {
             // DEAD END CONDITION
-
             if node.child_nodes.is_empty() {
+                while let Some(param_start_at) = u_path.find(":") {
+                    if param_start_at > 0 {
+                        let prefix_path = &u_path[..param_start_at];
+                        node = node.add_child_node(RadixNode::new(prefix_path.to_string()))
+                    }
+
+                    let remaining = &u_path[param_start_at..];
+
+                    let param_end_at: usize = remaining
+                        .find("/")
+                        .map(|idx| idx + 1 + param_start_at)
+                        .unwrap_or(u_path.len());
+
+                    let param = &u_path[param_start_at..param_end_at];
+
+                    node = node.add_child_node(RadixNode::new(param.to_string()));
+                    u_path = &u_path[param_end_at..];
+                }
+
                 let node_path = Self::add_slash_suffix(u_path);
-                let mut child_node = RadixNode::new(node_path);
+
+                if !node_path.is_empty() && node_path != "/" {
+                    node = node.add_child_node(RadixNode::new(node_path.to_string()));
+                }
 
                 if let Some((m, h)) = method.zip(handler)
-                    && let Err(e) = child_node.add_method(m, h)
+                    && let Err(e) = node.add_method(m, h)
                 {
-                    eprintln!("{:?}", e);
-                    break;
+                    panic!("{e}")
                 }
-                node.add_child_node(child_node);
-
                 return Ok(());
             }
 
             let mut matched_any: bool = false;
+
             for (i, child) in node.child_nodes.iter().enumerate() {
                 match Self::get_prefix_between_two_strings(u_path, &child.path) {
                     Ok(Some(_prefix)) => {
@@ -108,12 +130,13 @@ impl RadixTrie {
                             if u_param_name != child_param_name {
                                 panic!(
                                     "Error: Conflicting parameter names at the same route level. \
-             You already registered '{}', but you are trying to insert '{}'. \
-             Full path: {}",
+                                    You already registered '{}', but you are trying to insert '{}'. \
+                                    Full Request Path: {}",
                                     child_param_name, u_param_name, &request_path
                                 );
                             }
                         }
+
                         matched_any = true;
                         prefix_len = _prefix.len();
 
@@ -151,16 +174,25 @@ impl RadixTrie {
 
         if let Some(perfect_match_index) = perfect_match {
             let perfect_match_node = &mut node.child_nodes[perfect_match_index];
+
             if let Some((m, h)) = method.zip(handler)
                 && let Err(e) = perfect_match_node.add_method(m, h)
             {
                 eprintln!("{}", e);
                 return Err(String::from(e));
             }
+
+            if perfect_match_node.path.starts_with(":") {
+                perfect_match_node.set_param(true);
+            }
+
             return Ok(());
         }
 
         if partial_prefix {
+            // A partial prefix occurs when two or more node paths share a prefix
+            // when this occurs, the end path after the prefix will hold the methods and children
+            // of the node that was splited, THIS IS THE RULE.
             let splitoff_path = node.path[prefix_len..].to_string();
             let way_path = node.path[..prefix_len].to_string();
 
@@ -178,28 +210,61 @@ impl RadixTrie {
 
             node.update_node_path(&way_path);
 
+            node.add_child_node(splitoff_node);
+
             if !u_path.is_empty() {
-                let mut new_node = RadixNode::new(Self::add_slash_suffix(u_path));
+                loop {
+                    match u_path.find(":") {
+                        Some(param_idx_start) => {
+                            let (new_node, param_end_at) =
+                                node.insert_param_node(u_path, param_idx_start)?;
+
+                            u_path = &u_path[param_end_at..];
+                            node = new_node;
+                        }
+                        None => {
+                            if !u_path.is_empty() && u_path != "/" {
+                                node = node
+                                    .add_child_node(RadixNode::new(Self::add_slash_suffix(u_path)));
+                            }
+
+                            break;
+                        }
+                    }
+                }
 
                 if let Some((m, h)) = method.zip(handler)
-                    && let Err(e) = new_node.add_method(m, h)
+                    && let Err(e) = node.add_method(m, h)
                 {
                     println!("{}", e);
                 };
-                node.add_child_node(new_node);
+            }
+        } else {
+            loop {
+                match u_path.find(":") {
+                    Some(param_idx_start) => {
+                        let (new_node, param_end_at) =
+                            node.insert_param_node(u_path, param_idx_start)?;
+
+                        u_path = &u_path[param_end_at..];
+                        node = new_node;
+                    }
+                    None => {
+                        if !u_path.is_empty() && u_path != "/" {
+                            node =
+                                node.add_child_node(RadixNode::new(Self::add_slash_suffix(u_path)));
+                        }
+
+                        break;
+                    }
+                }
             }
 
-            node.add_child_node(splitoff_node);
-        } else {
-            let mut new_node = RadixNode::new(Self::add_slash_suffix(u_path));
             if let Some((m, h)) = method.zip(handler)
-                && let Err(e) = new_node.add_method(m, h)
+                && let Err(e) = node.add_method(m, h)
             {
                 println!("{}", e);
-                return Err(String::from(e));
-            }
-
-            node.add_child_node(new_node);
+            };
             return Ok(());
         };
 
@@ -219,8 +284,11 @@ impl RadixTrie {
             Some((p, q)) => (p, Some(q)),
             None => (request_path, None),
         };
+
         let normalized_path: String = Self::add_slash_suffix(path_string);
         let mut path: &str = &Self::strip_slash_prefix(&normalized_path);
+
+        println!("path {path}");
 
         // step 2: Loop: Traverse the trie and look for diveregent - where the url and trie are prefix,
         // break the request path and traverse with the suffix
@@ -237,16 +305,24 @@ impl RadixTrie {
             let mut matched_any: bool = false;
 
             for child in children.iter() {
-                if child.path.starts_with(':') {
+                if child.path.contains(':') {
                     matched_any = false;
                     param_node = Some(child);
                     continue;
                 }
 
+                println!("path => {path} vs child -> {}", child.path);
                 match path.strip_prefix(&child.path) {
                     Some(remaining_path) => {
+                        // let child_end_with_slash = child.path.ends_with("/");
+                        // let remaining_path_starts_slash = remaining_path.starts_with("/");
+                        //
+                        println!("XXXX => remaining {remaining_path}");
+
                         node = child;
                         path = remaining_path;
+
+                        println!("The remaining path => {remaining_path}");
 
                         matched_any = true;
                         break;
@@ -257,35 +333,65 @@ impl RadixTrie {
                 };
             }
 
-            if path == "/" && !matched_any {
-                return Err(RouterError::RouteNotFound);
-            }
+            // if path == "/" && !matched_any {
+            //     return Err(RouterError::RouteNotFound);
+            // }
 
             // if there was a match in the search, return the value
+            println!("MAtched any => {matched_any}");
             if !matched_any {
                 if let Some(p_node) = param_node {
-                    let param_end_at = path.find("/").unwrap_or(path.len());
-                    let p_node_path = &p_node.path[1..];
+                    // Note that
+                    // 1. all param node are now their individual node. so n
+                    // node.path  = ":xxx"      - This is a rule that cannot be broken.
+                    // Implement with that mindset.
+                    //
+                    // 2. At this point, we know that the path here, will start with the
+                    //    param, ie we expect the param to start at index 0.
 
-                    let param_key = match p_node_path.strip_suffix('/') {
-                        Some(key) => key,
-                        None => p_node_path,
+                    let param_key: &str = &p_node.path[..]
+                        .trim_start_matches(":")
+                        .trim_end_matches("/");
+
+                    let runtime_param_len: usize = path.find("/").unwrap_or(path.len());
+
+                    let param_value: &str = &path[..runtime_param_len];
+
+                    params_vec.push((param_key, param_value));
+                    println!("Before path => {path}");
+                    println!("The runtime_param_len => {runtime_param_len}");
+
+                    // to account for the the forward slash - add 1 to the runtime_param_len
+                    path = if runtime_param_len + 1 < path.len() {
+                        println!("??");
+                        &path[runtime_param_len + 1..]
+                    } else {
+                        println!("?");
+                        node = p_node;
+                        path = "";
+                        break 'outer;
                     };
-                    let param_value = &path[..param_end_at];
-
-                    params_vec.push((&param_key, param_value));
+                    println!("After path => {path}");
 
                     node = p_node;
-                    path = &path[param_end_at..];
                 } else {
-                    break 'outer;
+                    println!("XX");
+                    return Err(RouterError::RouteNotFound);
                 }
             };
 
-            if path.is_empty() || node.child_nodes.is_empty() || path == "/" {
+            if !path.is_empty() && node.child_nodes.is_empty() {
+                println!("Fuxk");
+                return Err(RouterError::RouteNotFound);
+            }
+
+            if path.is_empty() || node.child_nodes.is_empty() {
+                println!("XXYY");
                 break 'outer;
             }
         }
+
+        println!("Outside => {path}");
 
         let Some(methods) = &node.methods else {
             return Err(RouterError::RouteNotFound);
@@ -294,6 +400,9 @@ impl RadixTrie {
         let Some(handler) = methods.get(&method) else {
             return Err(RouterError::MethodNotFound);
         };
+
+        println!("Info from the param");
+        println!("param => {:?}", params_vec);
 
         let query: HashMap<String, String> = match query_string {
             None => HashMap::new(),
@@ -335,9 +444,12 @@ impl RadixTrie {
 
         if prefix.len() == 0 {
             return Ok(None);
-        } else if prefix.len() == 1 && prefix == b"/" {
-            return Ok(None);
-        } else {
+        }
+        // else if prefix.len() == 1 && prefix == b"/" {
+        //         println!("ch");
+        //     return Ok(None);
+        // }
+        else {
             let prefix_string = match String::from_utf8(prefix) {
                 Ok(s) => s,
                 Err(e) => {
