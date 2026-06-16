@@ -28,7 +28,6 @@ fn test_router_resolves_static_path() {
 
     let resolved_handler = result.unwrap();
     let res = resolved_handler(&mock_req);
-    println!("res => {:?}", res);
     assert_eq!(res.status_code, 200);
 }
 
@@ -39,10 +38,7 @@ fn test_router_resolves_dynamic_path() {
     let mut mock_req = Request::new();
 
     router.show_routes();
-    println!("About to resolve path");
     let result = router.resolve_path(&mut mock_req, "/api/v1/user/usserid/", AllowedMethods::POST);
-
-    println!("errror => {:?}", result);
 
     assert!(result.is_ok());
     assert!(mock_req.param.is_some());
@@ -81,7 +77,6 @@ fn test_router_resolves_static_and_dynamic_path() {
     let mut result = router.resolve_path(&mut request, "/api/user", AllowedMethods::POST);
     assert!(result.is_ok());
     result = router.resolve_path(&mut request, "/api/users", AllowedMethods::GET);
-    println!("result for apiusers => {:?}", result);
     assert!(result.is_ok());
     result = router.resolve_path(&mut request, "/api/user/userid/post", AllowedMethods::POST);
     assert!(result.is_ok());
@@ -112,7 +107,6 @@ fn test_router_resolves_static_and_dynamic_path() {
         "/api/user/user_one/post/post_one",
         AllowedMethods::GET,
     );
-    println!("REsult should fail => {:?}", result);
     assert!(result.is_ok());
     let Some(paramtwo) = request_three.param else {
         panic!("TestFailed: expected some param value")

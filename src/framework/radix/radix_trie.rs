@@ -288,8 +288,6 @@ impl RadixTrie {
         let normalized_path: String = Self::add_slash_suffix(path_string);
         let mut path: &str = &Self::strip_slash_prefix(&normalized_path);
 
-        println!("path {path}");
-
         // step 2: Loop: Traverse the trie and look for diveregent - where the url and trie are prefix,
         // break the request path and traverse with the suffix
         // // Consider special patterns, eg dynamic param (xxx/:id) - determine the order of
@@ -310,20 +308,13 @@ impl RadixTrie {
                     param_node = Some(child);
                     continue;
                 }
-
-                println!("path => {path} vs child -> {}", child.path);
                 match path.strip_prefix(&child.path) {
                     Some(remaining_path) => {
                         // let child_end_with_slash = child.path.ends_with("/");
                         // let remaining_path_starts_slash = remaining_path.starts_with("/");
                         //
-                        println!("XXXX => remaining {remaining_path}");
-
                         node = child;
                         path = remaining_path;
-
-                        println!("The remaining path => {remaining_path}");
-
                         matched_any = true;
                         break;
                     }
@@ -338,7 +329,6 @@ impl RadixTrie {
             // }
 
             // if there was a match in the search, return the value
-            println!("MAtched any => {matched_any}");
             if !matched_any {
                 if let Some(p_node) = param_node {
                     // Note that
@@ -349,6 +339,8 @@ impl RadixTrie {
                     // 2. At this point, we know that the path here, will start with the
                     //    param, ie we expect the param to start at index 0.
 
+                    // We know that if a param node starts with a : and if it is a valid path it
+                    // will end with / - lets trim that to get the raw param key
                     let param_key: &str = &p_node.path[..]
                         .trim_start_matches(":")
                         .trim_end_matches("/");
@@ -358,40 +350,28 @@ impl RadixTrie {
                     let param_value: &str = &path[..runtime_param_len];
 
                     params_vec.push((param_key, param_value));
-                    println!("Before path => {path}");
-                    println!("The runtime_param_len => {runtime_param_len}");
 
-                    // to account for the the forward slash - add 1 to the runtime_param_len
+                    // to account for the the forward slash in the request path - add 1 to the runtime_param_len
                     path = if runtime_param_len + 1 < path.len() {
-                        println!("??");
                         &path[runtime_param_len + 1..]
                     } else {
-                        println!("?");
                         node = p_node;
-                        path = "";
                         break 'outer;
                     };
-                    println!("After path => {path}");
-
                     node = p_node;
                 } else {
-                    println!("XX");
                     return Err(RouterError::RouteNotFound);
                 }
             };
 
             if !path.is_empty() && node.child_nodes.is_empty() {
-                println!("Fuxk");
                 return Err(RouterError::RouteNotFound);
             }
 
             if path.is_empty() || node.child_nodes.is_empty() {
-                println!("XXYY");
                 break 'outer;
             }
         }
-
-        println!("Outside => {path}");
 
         let Some(methods) = &node.methods else {
             return Err(RouterError::RouteNotFound);
@@ -400,9 +380,6 @@ impl RadixTrie {
         let Some(handler) = methods.get(&method) else {
             return Err(RouterError::MethodNotFound);
         };
-
-        println!("Info from the param");
-        println!("param => {:?}", params_vec);
 
         let query: HashMap<String, String> = match query_string {
             None => HashMap::new(),
@@ -445,10 +422,6 @@ impl RadixTrie {
         if prefix.len() == 0 {
             return Ok(None);
         }
-        // else if prefix.len() == 1 && prefix == b"/" {
-        //         println!("ch");
-        //     return Ok(None);
-        // }
         else {
             let prefix_string = match String::from_utf8(prefix) {
                 Ok(s) => s,
