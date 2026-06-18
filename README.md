@@ -1,33 +1,34 @@
-# lb-http-parser
+# lb: A Simple Load Balancer in Rust
 
-A lightweight HTTP/1.x request parser written in Rust. This hobby academic project explores the internals of HTTP request parsing according to RFC 9112 specifications.
+This project is an educational exploration into building a simple, asynchronous load balancer from scratch in Rust. What began as an academic exercise in HTTP/1.x parsing has evolved into a minimalist web framework that now serves as the foundation for the load balancer.
 
-## Overview
+## Core Components (The Mini-Framework)
 
-`lb-http-parser` is a TCP server that listens for incoming HTTP requests and parses them into structured components. It supports the standard HTTP methods (GET, POST, PATCH, DELETE, PUT) and handles both fixed-length request bodies (via `Content-Length`) and chunked transfer encoding (via `Transfer-Encoding: chunked`).
+The project is built on a few core, custom-built components:
 
-## Architecture
+1.  **TCP Listener (`src/cmd/tcplistener.rs`)**: A basic TCP server that accepts incoming connections.
+2.  **HTTP/1.x Parser (`src/internal/`)**: A state-machine parser built to comply with RFC 9112. It handles request lines, headers, and body parsing (including fixed-length and chunked encodings).
+3.  **Router (`src/framework/`)**: A routing engine built on a custom **Radix Trie** implementation. It supports dynamic path segments (e.g., `/users/:id`) and query parameters.
 
-The parser follows a state-machine approach with three main stages:
+## Project Status & Roadmap
 
-1. **Request Line Parser** (`src/internal/request.rs`)
-   - Extracts HTTP method, request target, and HTTP version
-   - Validates method support and HTTP specification compliance
+The foundational framework components are complete. The project is now moving into the load balancer implementation phase.
 
-2. **Headers Parser** (`src/internal/headers.rs`)
-   - Parses field lines into a case-insensitive header map
-   - Validates field name tokens according to RFC 9112
+### Completed
+- [x] HTTP/1.x Request Parser
+- [x] Radix Trie-based Router
+- [x] Basic TCP Server
 
-3. **Body Parser** (`src/internal/body/`)
-   - Handles fixed-length bodies via `Content-Length` header
-   - Supports chunked transfer encoding parsing
-   - Enforces maximum message size constraints
+### Next Steps
 
-The TCP listener (`src/cmd/tcplistener.rs`) binds to `127.0.0.1:8080` and delegates each incoming connection to the request parser.
+1.  **Integrate Router & Listener**: Connect the router to the TCP listener to dispatch requests to handlers.
+2.  **Implement Reverse Proxy**: Create a handler that forwards requests to an upstream server.
+3.  **Manage Upstream Pool**: Design a structure to hold and manage a list of backend servers.
+4.  **Implement Load Balancing Strategy**: Add a Round Robin strategy to select a server from the pool.
 
 ## Building
 
-Requires Rust toolchain. Build with:
+Requires the Rust toolchain.
 
 ```bash
 cargo build
@@ -35,24 +36,19 @@ cargo build
 
 ## Running
 
-Start the server with:
+Start the server:
 
 ```bash
 cargo run
 ```
 
-The server will listen on `127.0.0.1:8080` and log parsed HTTP requests to stdout.
+The server will listen on `127.0.0.1:8080`.
 
 ## Testing
 
-Run the test suite with:
+Run the test suite:
 
 ```bash
 cargo test
 ```
 
-Tests are embedded in each parsing module and cover request line validation, header parsing, and body extraction scenarios.
-
-## Status
-
-**In Development** — This is a work-in-progress project. Some error handling paths contain placeholder implementations (`todo!()` macros).

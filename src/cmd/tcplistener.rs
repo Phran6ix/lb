@@ -31,7 +31,7 @@ pub fn listen_for_http() -> Result<(), Error> {
                     Ok(data) => data,
                     Err(e) => {
                         eprintln!("An error occured when writing bytes to stream, {e}");
-                        break;
+                        continue;
                     }
                 };
 
