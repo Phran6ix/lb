@@ -1,7 +1,10 @@
+use std::result;
+
 use lb::AllowedMethods;
 use lb::Request;
 use lb::Response;
 use lb::Router;
+use lb::framework::radix::radix_trie::RouterError;
 
 fn mock_response(_req: &Request) -> Response {
     Response::new(200, "OK", None)
@@ -37,7 +40,7 @@ fn test_router_resolves_dynamic_path() {
     router.post("/api/v1/user/:id", mock_response).unwrap();
     let mut mock_req = Request::new();
 
-    router.show_routes();
+    // router.show_routes();
     let result = router.resolve_path(&mut mock_req, "/api/v1/user/usserid/", AllowedMethods::POST);
 
     assert!(result.is_ok());
@@ -71,7 +74,7 @@ fn test_router_resolves_static_and_dynamic_path() {
         .get("/api/user/:userId/post/:postId", mock_response)
         .unwrap();
 
-    router.show_routes();
+    // router.show_routes();
     let mut request = Request::new();
 
     let mut result = router.resolve_path(&mut request, "/api/user", AllowedMethods::POST);
@@ -113,4 +116,120 @@ fn test_router_resolves_static_and_dynamic_path() {
     };
     assert_eq!(paramtwo["userId"], "user_one");
     assert_eq!(paramtwo["postId"], "post_one");
-}           
+}
+
+#[test]
+fn test_router_resolves_path_with_query() {
+    let mut router = Router::new();
+
+    //static rouers
+    router.post("/api/user", mock_response).unwrap();
+    router.get("/api/users", mock_response).unwrap();
+
+    let mut req = Request::new();
+    let result = router.resolve_path(
+        &mut req,
+        "/api/users?sort=asc&limit=10",
+        AllowedMethods::GET,
+    );
+
+    assert!(result.is_ok());
+    let Some(query) = req.query else {
+        panic!("TestFailed: Expected some query values")
+    };
+
+    assert_eq!(query["sort"], "asc");
+    assert_eq!(query["limit"], "10");
+}
+
+#[test]
+fn test_router_resolves_static_on_a_dynamic_path() {
+    let mut router = Router::new();
+
+    router.post("/api/user", mock_response).unwrap();
+
+    // overlapping routes
+    router.post("/api/users/new", mock_response).unwrap();
+    router.get("/api/users/:userId", mock_response).unwrap();
+
+    let mut req = Request::new();
+    let mut result = router.resolve_path(&mut req, "/api/users/new", AllowedMethods::POST);
+
+    assert!(result.is_ok());
+    if let Some(no_param) = req.param {
+        assert!(no_param.is_empty());
+    }
+
+    let mut request = Request::new();
+    result = router.resolve_path(&mut request, "/api/users/user_one", AllowedMethods::GET);
+
+    assert!(result.is_ok());
+    let Some(param) = request.param else {
+        panic!("TestFailed: Expected some params");
+    };
+    assert_eq!(param["userId"], "user_one");
+}
+
+#[test]
+fn test_router_no_match_failure() {
+    let mut router = Router::new();
+
+    //static rouers
+    router.post("/api/user", mock_response).unwrap();
+    router.get("/api/users", mock_response).unwrap();
+
+    let mut req = Request::new();
+    let mut result = router.resolve_path(&mut req, "/api/user_x", AllowedMethods::POST);
+
+    assert!(result.is_err());
+    let not_found_err_value = result.unwrap_err();
+    assert_eq!(not_found_err_value, RouterError::RouteNotFound.to_string());
+
+    result = router.resolve_path(&mut req, "/api/user", AllowedMethods::PATCH);
+
+    assert!(result.is_err());
+    let method_not_found_err = result.unwrap_err();
+
+    assert_eq!(
+        method_not_found_err,
+        RouterError::MethodNotFound.to_string()
+    );
+}
+
+#[test]
+fn test_router_trailing_slash() {
+    let mut router = Router::new();
+    router.post("/api/user", mock_response).unwrap();
+    router.get("/api/users/:id", mock_response).unwrap();
+
+    let mut req = Request::new();
+    let result = router.resolve_path(&mut req, "/api//", AllowedMethods::POST);
+
+    println!("REsultt ==> {:?}", result);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_router_out_of_bounds() {
+    let mut router = Router::new();
+
+    router
+        .post("/api/user/:userId/post", mock_response)
+        .unwrap();
+    router.get("/api/users/:userId", mock_response).unwrap();
+    router
+        .get("/api/user/:userId/post/:postId", mock_response)
+        .unwrap();
+
+    router.show_routes();
+
+    let mut req = Request::new();
+    let result = router.resolve_path(
+        &mut req,
+        "/api/users/user_one/out/of/bounds",
+        AllowedMethods::GET,
+    );
+    assert!(result.is_err());
+    let out_of_bound_err = result.unwrap_err();
+    assert_eq!(out_of_bound_err, RouterError::RouteNotFound.to_string());
+}

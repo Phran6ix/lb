@@ -41,18 +41,18 @@ pub fn listen_for_http() -> Result<(), Error> {
                             let response =
                                 Response::new(400, "Bad Request", Some(e.to_string().into_bytes()));
                             response.send(&mut stream).ok();
-                            break;
+                            continue;
                         }
                         ErrorKind::Unsupported => {
                             let response =
                                 Response::new(415, "Unsupported", Some(e.to_string().into_bytes()));
                             response.send(&mut stream).ok();
-                            break;
+                            continue;
                         }
                         _ => {
                             let response = Response::new(500, "Internal Server Error", None);
                             response.send(&mut stream).ok();
-                            break;
+                            continue;
                         }
                     }
                 };
