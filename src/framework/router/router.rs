@@ -1,6 +1,9 @@
 use crate::{
-    framework::{AllowedMethods, radix::radix_trie::RadixTrie},
-    internal::{request::Request, response::Response},
+    framework::radix::radix_trie::RadixTrie,
+    internal::{
+        request::{Request, RequestMethod},
+        response::Response,
+    },
 };
 
 pub type Handler = fn(&Request) -> Response;
@@ -18,23 +21,23 @@ impl Router {
 
     pub fn get(&mut self, path: &str, handler: Handler) -> Result<(), String> {
         self.trie
-            .insert(path, Some(AllowedMethods::GET), Some(handler))
+            .insert(path, Some(RequestMethod::Get), Some(handler))
     }
     pub fn post(&mut self, path: &str, handler: Handler) -> Result<(), String> {
         self.trie
-            .insert(path, Some(AllowedMethods::POST), Some(handler))
+            .insert(path, Some(RequestMethod::Post), Some(handler))
     }
     pub fn patch(&mut self, path: &str, handler: Handler) -> Result<(), String> {
         self.trie
-            .insert(path, Some(AllowedMethods::PATCH), Some(handler))
+            .insert(path, Some(RequestMethod::Patch), Some(handler))
     }
     pub fn put(&mut self, path: &str, handler: Handler) -> Result<(), String> {
         self.trie
-            .insert(path, Some(AllowedMethods::PUT), Some(handler))
+            .insert(path, Some(RequestMethod::Put), Some(handler))
     }
     pub fn delete(&mut self, path: &str, handler: Handler) -> Result<(), String> {
         self.trie
-            .insert(path, Some(AllowedMethods::DELETE), Some(handler))
+            .insert(path, Some(RequestMethod::Delete), Some(handler))
     }
 
     pub fn show_routes(&self) {
@@ -45,7 +48,7 @@ impl Router {
         &mut self,
         req: &mut Request,
         request_path: &str,
-        method: AllowedMethods,
+        method: &RequestMethod,
     ) -> Result<Handler, String> {
         let route = self
             .trie
@@ -54,7 +57,6 @@ impl Router {
 
         req.set_param(route.params);
         req.set_query(route.query);
-
 
         Ok(*route.handler)
     }

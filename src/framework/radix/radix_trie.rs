@@ -3,8 +3,9 @@ use std::{
     collections::HashMap,
     io::{Error, ErrorKind},
 };
+use crate::internal::request::RequestMethod;
 
-use crate::framework::{AllowedMethods, radix::radix_node::RadixNode, router::router::Handler};
+use crate::framework::{radix::radix_node::RadixNode, router::router::Handler};
 
 #[derive(Debug)]
 pub enum RouterError {
@@ -45,7 +46,7 @@ impl RadixTrie {
     pub fn insert(
         &mut self,
         request_path: &str,
-        method: Option<AllowedMethods>,
+        method: Option<RequestMethod>,
         handler: Option<Handler>,
     ) -> Result<(), String> {
         // To insert
@@ -274,7 +275,7 @@ impl RadixTrie {
     pub fn search(
         &self,
         request_path: &str,
-        method: AllowedMethods,
+        method: &RequestMethod,
     ) -> Result<RouteMatch<'_>, RouterError> {
         // Step 1: Normalize the string, all url must end with a / since that is the normalizing
         // logic that the insert works with.
@@ -421,8 +422,7 @@ impl RadixTrie {
 
         if prefix.len() == 0 {
             return Ok(None);
-        }
-        else {
+        } else {
             let prefix_string = match String::from_utf8(prefix) {
                 Ok(s) => s,
                 Err(e) => {

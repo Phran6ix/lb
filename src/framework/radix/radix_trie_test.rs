@@ -1,5 +1,7 @@
-use crate::framework::AllowedMethods;
-use crate::internal::{request::Request, response::Response};
+use crate::internal::{
+    request::{Request, RequestMethod},
+    response::Response,
+};
 
 use crate::framework::radix::radix_trie::{RadixTrie, RouterError};
 
@@ -43,11 +45,16 @@ fn trie_setup() -> RadixTrie {
         Response::new(200, "Success", None)
     }
 
-    trie.insert("/health", Some(AllowedMethods::GET), Some(handler));
-    trie.insert("/api", None, None);
-    trie.insert("/api/users", Some(AllowedMethods::POST), Some(handler));
-    trie.insert("/api/users/", Some(AllowedMethods::GET), Some(handler));
-    trie.insert("/api/users/:id", Some(AllowedMethods::GET), Some(handler));
+    trie.insert("/health", Some(RequestMethod::Get), Some(handler))
+        .unwrap();
+    trie.insert("/api", None, None).unwrap();
+    trie.insert("/api/users", Some(RequestMethod::Post), Some(handler))
+        .unwrap();
+    trie.insert("/api/users/", Some(RequestMethod::Get), Some(handler))
+        .unwrap();
+    trie.insert("/api/users/:id", Some(RequestMethod::Get), Some(handler))
+        .unwrap();
+
     trie
 }
 
@@ -73,34 +80,34 @@ fn test_radix_trie_insert() {
         Response::new(200, "Done", None)
     }
 
-    trie.insert(root_api, None, None);
-    trie.insert(health_route, Some(AllowedMethods::GET), Some(handler));
-    trie.insert(get_users, Some(AllowedMethods::GET), Some(handler));
-    trie.insert(get_books, Some(AllowedMethods::GET), Some(handler));
-    trie.insert(get_active_users, Some(AllowedMethods::GET), Some(handler));
-    trie.insert(book, Some(AllowedMethods::GET), Some(handler));
-    trie.insert(book, Some(AllowedMethods::POST), Some(handler));
-    trie.insert(upload, Some(AllowedMethods::POST), Some(handler));
+    trie.insert(root_api, None, None).unwrap();
+    trie.insert(health_route, Some(RequestMethod::Get), Some(handler)).unwrap();
+    trie.insert(get_users, Some(RequestMethod::Get), Some(handler)).unwrap();
+    trie.insert(get_books, Some(RequestMethod::Get), Some(handler)).unwrap();
+    trie.insert(get_active_users, Some(RequestMethod::Get), Some(handler)).unwrap();
+    trie.insert(book, Some(RequestMethod::Get), Some(handler)).unwrap();
+    trie.insert(book, Some(RequestMethod::Post), Some(handler)).unwrap();
+    trie.insert(upload, Some(RequestMethod::Post), Some(handler)).unwrap();
     trie.insert(
         initiate_transaction,
-        Some(AllowedMethods::POST),
+        Some(RequestMethod::Post),
         Some(handler),
-    );
+    ).unwrap();
     trie.insert(
         fetch_user_transaction,
-        Some(AllowedMethods::GET),
+        Some(RequestMethod::Get),
         Some(handler),
-    );
+    ).unwrap();
     trie.insert(
         fetch_user_single_transaction,
-        Some(AllowedMethods::GET),
+        Some(RequestMethod::Get),
         Some(handler),
-    );
+    ).unwrap();
     trie.insert(
         fetch_users_pending_transaction,
-        Some(AllowedMethods::GET),
+        Some(RequestMethod::Get),
         Some(handler),
-    );
+    ).unwrap();
 
     let root_node = trie.get_root_node();
     let children_node = root_node.get_children();
@@ -116,7 +123,7 @@ fn test_radix_trie_insert() {
         .iter()
         .map(|c| c.path.to_string())
         .collect();
-    let input_child_paths = vec![
+    let _ = vec![
         String::from("users"),
         String::from("books"),
         String::from("transaction"),
@@ -144,7 +151,7 @@ fn test_radix_trie_search() {
     let search_key: &str = "/health";
 
     trie.get_root_node().print(3);
-    let result = trie.search(search_key, AllowedMethods::GET);
+    let result = trie.search(search_key, &RequestMethod::Get);
     // println!("This is for no input => {:?} ", result);
 
     assert!(result.is_ok());
@@ -159,7 +166,7 @@ fn test_radix_trie_search_with_param_input() {
     trie.get_root_node().print(3);
 
     let search_key = "/api/users/99";
-    let result = trie.search(search_key, AllowedMethods::GET);
+    let result = trie.search(search_key, &RequestMethod::Get);
 
     assert!(result.is_ok());
     let route_match = result.unwrap();
@@ -174,7 +181,7 @@ fn test_radix_trie_search_with_param_input() {
 fn test_radix_trie_search_with_query_input() {
     let trie = trie_setup();
     let search_key = "/api/users?limit=60&active=true&sort=desc";
-    let result = trie.search(search_key, AllowedMethods::GET);
+    let result = trie.search(search_key,&RequestMethod::Get);
 
     assert!(result.is_ok());
     let route_match = result.unwrap();
@@ -189,7 +196,7 @@ fn test_radix_trie_search_with_param_and_query_input() {
     let trie = trie_setup();
     let search_key = "/api/users/99?limit=60&active=true&sort=desc";
 
-    let result = trie.search(search_key, AllowedMethods::GET);
+    let result = trie.search(search_key, &RequestMethod::Get);
     assert!(result.is_ok());
     let route_match = result.unwrap();
     let route_param = route_match.params;
@@ -204,7 +211,7 @@ fn test_radix_trie_search_with_param_and_query_input() {
 fn test_radix_trie_search_invalid_route() {
     let trie = trie_setup();
     let search_key = "/api/ghost/single";
-    let result = trie.search(search_key, AllowedMethods::DELETE);
+    let result = trie.search(search_key,&RequestMethod::Delete);
 
     assert!(result.is_err());
     assert!(matches!(result, Err(RouterError::RouteNotFound)));
@@ -214,7 +221,7 @@ fn test_radix_trie_search_invalid_route() {
 fn test_radix_trie_search_invalid_method() {
     let trie = trie_setup();
     let search_key = "/api/users";
-    let result = trie.search(search_key, AllowedMethods::DELETE);
+    let result = trie.search(search_key, &RequestMethod::Delete);
 
     assert!(result.is_err());
     assert!(matches!(result, Err(RouterError::MethodNotFound)));

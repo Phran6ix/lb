@@ -19,7 +19,7 @@ impl ErrorMsg {
     pub const INVALID_FIELD_LINE: &str = "Invalid field line.";
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum RequestMethod {
     Get,
     Post,
@@ -94,31 +94,35 @@ impl Request {
         self.state == ParsingState::Error || self.state == ParsingState::Done
     }
 
-   pub fn set_param(&mut self, param: HashMap<String, String>) -> &mut Self {
+    pub fn set_param(&mut self, param: HashMap<String, String>) -> &mut Self {
         if param.is_empty() {
             return self;
         }
-        let Some(req_params) = &mut self.param else {
-            self.param = Some(param);
-            return self;
-        };
 
-        req_params.reserve(param.len());
-        req_params.extend(param);
+        let request_params = self.param.get_or_insert_with(HashMap::new);
+
+        // let Some(req_params) = &mut self.param else {
+        //     self.param = Some(param);
+        //     return self;
+        // };
+
+        request_params.reserve(param.len());
+        request_params.extend(param);
         self
     }
 
- pub   fn set_query(&mut self, query: HashMap<String, String>) -> &mut Self {
+    pub fn set_query(&mut self, query: HashMap<String, String>) -> &mut Self {
         if query.is_empty() {
             return self;
         }
-        let Some(req_querys) = &mut self.query else {
-            self.query = Some(query);
-            return self;
-        };
+        let req_query = self.query.get_or_insert_with(HashMap::new);
+        // let Some(req_querys) = &mut self.query else {
+        //     self.query = Some(query);
+        //     return self;
+        // };
 
-        req_querys.reserve(query.len());
-        req_querys.extend(query);
+        req_query.reserve(query.len());
+        req_query.extend(query);
         self
     }
 }

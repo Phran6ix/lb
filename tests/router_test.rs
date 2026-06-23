@@ -1,10 +1,8 @@
-use std::result;
-
-use lb::AllowedMethods;
 use lb::Request;
 use lb::Response;
 use lb::Router;
 use lb::framework::radix::radix_trie::RouterError;
+use lb::internal::request::RequestMethod;
 
 fn mock_response(_req: &Request) -> Response {
     Response::new(200, "OK", None)
@@ -18,7 +16,7 @@ fn test_router_resolves_static_path() {
 
     let mut mock_req = Request::new();
 
-    let result = router.resolve_path(&mut mock_req, "/api/v1/dashboard", AllowedMethods::GET);
+    let result = router.resolve_path(&mut mock_req, "/api/v1/dashboard", &RequestMethod::Get);
 
     assert!(
         result.is_ok(),
@@ -41,7 +39,7 @@ fn test_router_resolves_dynamic_path() {
     let mut mock_req = Request::new();
 
     // router.show_routes();
-    let result = router.resolve_path(&mut mock_req, "/api/v1/user/usserid/", AllowedMethods::POST);
+    let result = router.resolve_path(&mut mock_req, "/api/v1/user/usserid/", &RequestMethod::Post);
 
     assert!(result.is_ok());
     assert!(mock_req.param.is_some());
@@ -77,11 +75,11 @@ fn test_router_resolves_static_and_dynamic_path() {
     // router.show_routes();
     let mut request = Request::new();
 
-    let mut result = router.resolve_path(&mut request, "/api/user", AllowedMethods::POST);
+    let mut result = router.resolve_path(&mut request, "/api/user", &RequestMethod::Post);
     assert!(result.is_ok());
-    result = router.resolve_path(&mut request, "/api/users", AllowedMethods::GET);
+    result = router.resolve_path(&mut request, "/api/users", &RequestMethod::Get);
     assert!(result.is_ok());
-    result = router.resolve_path(&mut request, "/api/user/userid/post", AllowedMethods::POST);
+    result = router.resolve_path(&mut request, "/api/user/userid/post", &RequestMethod::Post);
     assert!(result.is_ok());
     assert!(request.param.is_some());
 
@@ -95,7 +93,7 @@ fn test_router_resolves_static_and_dynamic_path() {
     result = router.resolve_path(
         &mut request_two,
         "/api/user/user_one/posts",
-        AllowedMethods::GET,
+        &RequestMethod::Get,
     );
     assert!(result.is_ok());
     let Some(param) = request_two.param else {
@@ -108,7 +106,7 @@ fn test_router_resolves_static_and_dynamic_path() {
     result = router.resolve_path(
         &mut request_three,
         "/api/user/user_one/post/post_one",
-        AllowedMethods::GET,
+        &RequestMethod::Get,
     );
     assert!(result.is_ok());
     let Some(paramtwo) = request_three.param else {
@@ -130,7 +128,7 @@ fn test_router_resolves_path_with_query() {
     let result = router.resolve_path(
         &mut req,
         "/api/users?sort=asc&limit=10",
-        AllowedMethods::GET,
+        &RequestMethod::Get,
     );
 
     assert!(result.is_ok());
@@ -153,7 +151,7 @@ fn test_router_resolves_static_on_a_dynamic_path() {
     router.get("/api/users/:userId", mock_response).unwrap();
 
     let mut req = Request::new();
-    let mut result = router.resolve_path(&mut req, "/api/users/new", AllowedMethods::POST);
+    let mut result = router.resolve_path(&mut req, "/api/users/new", &RequestMethod::Post);
 
     assert!(result.is_ok());
     if let Some(no_param) = req.param {
@@ -161,7 +159,7 @@ fn test_router_resolves_static_on_a_dynamic_path() {
     }
 
     let mut request = Request::new();
-    result = router.resolve_path(&mut request, "/api/users/user_one", AllowedMethods::GET);
+    result = router.resolve_path(&mut request, "/api/users/user_one", &RequestMethod::Get);
 
     assert!(result.is_ok());
     let Some(param) = request.param else {
@@ -179,13 +177,13 @@ fn test_router_no_match_failure() {
     router.get("/api/users", mock_response).unwrap();
 
     let mut req = Request::new();
-    let mut result = router.resolve_path(&mut req, "/api/user_x", AllowedMethods::POST);
+    let mut result = router.resolve_path(&mut req, "/api/user_x", &RequestMethod::Post);
 
     assert!(result.is_err());
     let not_found_err_value = result.unwrap_err();
     assert_eq!(not_found_err_value, RouterError::RouteNotFound.to_string());
 
-    result = router.resolve_path(&mut req, "/api/user", AllowedMethods::PATCH);
+    result = router.resolve_path(&mut req, "/api/user", &RequestMethod::Patch);
 
     assert!(result.is_err());
     let method_not_found_err = result.unwrap_err();
@@ -203,7 +201,7 @@ fn test_router_trailing_slash() {
     router.get("/api/users/:id", mock_response).unwrap();
 
     let mut req = Request::new();
-    let result = router.resolve_path(&mut req, "/api//", AllowedMethods::POST);
+    let result = router.resolve_path(&mut req, "/api//", &RequestMethod::Post);
 
     println!("REsultt ==> {:?}", result);
     assert!(result.is_err());
@@ -227,7 +225,7 @@ fn test_router_out_of_bounds() {
     let result = router.resolve_path(
         &mut req,
         "/api/users/user_one/out/of/bounds",
-        AllowedMethods::GET,
+        &RequestMethod::Get,
     );
     assert!(result.is_err());
     let out_of_bound_err = result.unwrap_err();

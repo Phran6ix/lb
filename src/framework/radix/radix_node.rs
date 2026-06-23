@@ -3,13 +3,13 @@ use std::{
     // fmt::format,
 };
 
-use crate::framework::{AllowedMethods, router::router::Handler};
+use crate::{framework::router::router::Handler, internal::request::RequestMethod};
 
 #[derive(Debug, Clone)]
 pub struct RadixNode {
     pub path: String,
     pub child_nodes: Vec<RadixNode>,
-    pub methods: Option<HashMap<AllowedMethods, Handler>>,
+    pub methods: Option<HashMap<RequestMethod, Handler>>,
     pub param: bool,
 }
 
@@ -31,7 +31,7 @@ impl RadixNode {
         self.child_nodes.last_mut().unwrap()
     }
 
-    pub fn add_method(&mut self, method: AllowedMethods, handler: Handler) -> Result<(), String> {
+    pub fn add_method(&mut self, method: RequestMethod, handler: Handler) -> Result<(), String> {
         let method_map = self.methods.get_or_insert_with(HashMap::new);
 
         match method_map.entry(method) {
@@ -76,7 +76,7 @@ impl RadixNode {
         &mut self,
         path: &str,
         param_idx_start_at: usize,
-    ) -> Result<( &mut Self, usize ), String> {
+    ) -> Result<(&mut Self, usize), String> {
         if param_idx_start_at > 0 {
             let path_bytes = path.as_bytes();
             if path_bytes[param_idx_start_at - 1] != b'/' {
@@ -115,7 +115,10 @@ impl RadixNode {
         };
 
         target_node.add_child_node(param_node);
-        return Ok(( target_node.child_nodes.last_mut().unwrap(), param_idx_end_at ));
+        return Ok((
+            target_node.child_nodes.last_mut().unwrap(),
+            param_idx_end_at,
+        ));
     }
 
     pub fn print(&self, depth: usize) {
@@ -207,7 +210,7 @@ mod radix_node {
         let child_node = RadixNode {
             path: "/example".to_string(),
             child_nodes: vec![],
-            methods: Some(HashMap::from([(AllowedMethods::PATCH, handler as Handler)])),
+            methods: Some(HashMap::from([(RequestMethod::Patch, handler as Handler)])),
             param: false,
         };
 
@@ -224,8 +227,8 @@ mod radix_node {
         };
 
         assert!(
-            method.contains_key(&AllowedMethods::PATCH),
-            "Expected PATCH method to be registerd in node."
+            method.contains_key(&RequestMethod::Patch),
+            "Expected Patch method to be registerd in node."
         );
     }
 
@@ -233,7 +236,7 @@ mod radix_node {
     fn test_add_method() {
         let mut node = RadixNode::new("/add_method");
 
-        if let Err(e) = node.add_method(AllowedMethods::DELETE, handler) {
+        if let Err(e) = node.add_method(RequestMethod::Delete, handler) {
             panic!("TestFailed: Method was not inserted: {:?}", e)
         };
 
@@ -241,22 +244,23 @@ mod radix_node {
             panic!("TestFailed: No method is registered on node");
         };
 
-        assert!(method.get(&AllowedMethods::DELETE).is_some())
+        assert!(method.get(&RequestMethod::Delete).is_some())
     }
 
     #[test]
     fn test_add_duplicate_method() {
         let mut node = RadixNode::new("/add_method");
 
-        node.add_method(AllowedMethods::DELETE, handler).unwrap();
+        node.add_method(RequestMethod::Delete, handler).unwrap();
 
-        let Err(actual_error) = node.add_method(AllowedMethods::DELETE, handler) else {
+        let Err(actual_error) = node.add_method(RequestMethod::Delete, handler) else {
             panic!("Error expxected. ")
         };
+        
 
         assert_eq!(
             actual_error,
-            "Method DELETE already exists on route /add_method"
+                "Method Delete already exists on route /add_method",
         )
     }
 
@@ -284,9 +288,9 @@ mod radix_node {
     #[test]
     fn test_handover_method() {
         let mut node = RadixNode::new("/handover");
-        node.add_method(AllowedMethods::PUT, handler).unwrap();
-        node.add_method(AllowedMethods::GET, handler).unwrap();
-        node.add_method(AllowedMethods::POST, handler).unwrap();
+        node.add_method(RequestMethod::Put, handler).unwrap();
+        node.add_method(RequestMethod::Get, handler).unwrap();
+        node.add_method(RequestMethod::Post, handler).unwrap();
 
         assert!(node.methods.is_some());
         let Some(methods) = &node.methods else {
@@ -305,9 +309,9 @@ mod radix_node {
         };
 
         assert_eq!(new_methods.len(), 3);
-        assert!(new_methods.contains_key(&AllowedMethods::GET));
-        assert!(new_methods.contains_key(&AllowedMethods::POST));
-        assert!(new_methods.contains_key(&AllowedMethods::PUT));
+        assert!(new_methods.contains_key(&RequestMethod::Get));
+        assert!(new_methods.contains_key(&RequestMethod::Post));
+        assert!(new_methods.contains_key(&RequestMethod::Put));
     }
 
     #[test]
