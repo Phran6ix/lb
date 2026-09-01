@@ -15,7 +15,7 @@ pub struct Headers {
     inner: HashMap<String, String>,
 }
 impl Headers {
-    fn new() -> Headers {
+    pub fn new() -> Headers {
         return Headers {
             inner: HashMap::new(),
         };
@@ -25,7 +25,7 @@ impl Headers {
         self.inner.get(&k.to_lowercase()).map(|v| v.as_str())
     }
 
-    fn set(&mut self, k: &str, v: &str) {
+    pub fn set(&mut self, k: &str, v: &str) {
         let key_lower = k.to_lowercase();
 
         self.inner

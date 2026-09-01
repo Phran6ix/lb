@@ -43,6 +43,18 @@ impl FromStr for RequestMethod {
     }
 }
 
+impl RequestMethod {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RequestMethod::Get => "GET",
+            RequestMethod::Post => "POST",
+            RequestMethod::Patch => "PATCH",
+            RequestMethod::Put => "PUT",
+            RequestMethod::Delete => "DELETE",
+        }
+    }
+}
+
 #[derive(PartialEq)]
 enum ParsingState {
     Init,
@@ -145,15 +157,16 @@ impl Request {
             return Err(Error::new(ErrorKind::InvalidData, "Invalid Data"));
         };
 
-        let start_line_str = format!("{:?} {:?} HTTP/{:?}", method, path, version);
+    
+        let start_line_str = format!("{} {} HTTP/{}", method.as_str(), path, version);
 
         // Serilizing the headers
         // https://datatracker.ietf.org/doc/html/rfc9112#name-field-syntax
 
         let mut field_lines: Vec<u8> = Vec::new();
 
-        field_lines.extend("Forwarded: my_loadbalancer".to_string().into_bytes());
-        field_lines.extend(CRLF);
+        field_lines.extend_from_slice(b"Forwarded: my_loadbalancer");
+        field_lines.extend_from_slice(CRLF);
 
         if let Some(headers) = &self.headers {
             for (h_key, h_value) in headers.iter() {
@@ -165,15 +178,16 @@ impl Request {
         println!("Field Lines : {:?}", field_lines);
 
         // Serialize the message Body
-        let body = &self.body;
         // Now let bring it all together
         //
         request_bytes.extend(start_line_str.into_bytes());
+        request_bytes.extend(CRLF);
         request_bytes.extend(field_lines);
 
         // \r\n to indicate end of field lines
         request_bytes.extend(CRLF);
-        request_bytes.extend_from_slice(body);
+        request_bytes.extend(CRLF);
+        request_bytes.extend_from_slice(&self.body);
 
         println!("Done");
         println!("{:?}", request_bytes);
@@ -388,5 +402,45 @@ mod test {
         assert_eq!(result.0, RequestMethod::Patch);
         assert_eq!(result.1, "/hello");
         assert_eq!(result.2, "HTTP/1.1");
+    }
+
+    #[test]
+    fn test_request_serialization() {
+        let mut headers = Headers::new();
+        headers.set("Host", "Localhost:8999");
+        headers.set("Content-type", "application/json");
+
+        let valid_request = Request {
+            state: ParsingState::Done,
+            method: Some(RequestMethod::Get),
+            version: Some("1.1".to_string()),
+            headers: Some(headers),
+            path: Some("/api/test".to_string()),
+            body: b"This is the body".to_vec(),
+            param: None,
+            query: None,
+        };
+
+        let raw_bytes = match valid_request.serialize() {
+            Ok(s) => s,
+            Err(e) => {
+                panic!("Could not serialize this request because: {:?}", e)
+            }
+        };
+
+        let output_str = String::from_utf8(raw_bytes).unwrap();
+
+        println!("This is the serialized_req: {:?}", output_str);
+
+        // let expected = b"GET /api/test HTTP/1.1\r\nHost: Localhost:8999\r\nContent-type: application/json\r\n\r\nThis is the body".to_vec();
+
+        assert!(output_str.starts_with("GET /api/test HTTP/1.1\r\n"));
+
+        // Assert Headers (order doesn't matter this way)
+        assert!(output_str.contains("host: Localhost:8999\r\n"));
+        assert!(output_str.contains("content-type: application/json\r\n"));
+
+        // Assert Body and ending boundary
+        assert!(output_str.ends_with("\r\n\r\nThis is the body"));
     }
 }
