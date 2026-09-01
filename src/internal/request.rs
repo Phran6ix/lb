@@ -125,6 +125,61 @@ impl Request {
         req_query.extend(query);
         self
     }
+
+    // Does the reverse of parse function
+    pub fn serialize(&self) -> Result<Vec<u8>, Error> {
+        // This will be the buffer that will be streamed
+        let mut request_bytes: Vec<u8> = Vec::new();
+
+        // Start lines
+
+        let Some(method) = &self.method else {
+            return Err(Error::new(ErrorKind::InvalidData, "Invalid Data"));
+        };
+
+        let Some(path) = &self.path else {
+            return Err(Error::new(ErrorKind::InvalidData, "Invalid Data"));
+        };
+
+        let Some(version) = &self.version else {
+            return Err(Error::new(ErrorKind::InvalidData, "Invalid Data"));
+        };
+
+        let start_line_str = format!("{:?} {:?} HTTP/{:?}", method, path, version);
+
+        // Serilizing the headers
+        // https://datatracker.ietf.org/doc/html/rfc9112#name-field-syntax
+
+        let mut field_lines: Vec<u8> = Vec::new();
+
+        field_lines.extend("Forwarded: my_loadbalancer".to_string().into_bytes());
+        field_lines.extend(CRLF);
+
+        if let Some(headers) = &self.headers {
+            for (h_key, h_value) in headers.iter() {
+                field_lines.extend(format!("{}: {}", h_key, h_value).into_bytes());
+                field_lines.extend(CRLF);
+            }
+        };
+
+        println!("Field Lines : {:?}", field_lines);
+
+        // Serialize the message Body
+        let body = &self.body;
+        // Now let bring it all together
+        //
+        request_bytes.extend(start_line_str.into_bytes());
+        request_bytes.extend(field_lines);
+
+        // \r\n to indicate end of field lines
+        request_bytes.extend(CRLF);
+        request_bytes.extend_from_slice(body);
+
+        println!("Done");
+        println!("{:?}", request_bytes);
+
+        return Ok(request_bytes);
+    }
 }
 
 // Following the RFC 9112

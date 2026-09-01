@@ -7,7 +7,7 @@ fn main() {
 
     let mut router = Router::new();
 
-    router.get("/test", |_req| {
+    router.post("/test", |_req| {
         Response::new(200, "Ok", Some("We are fxking live".as_bytes().to_vec()))
     }).unwrap();
 

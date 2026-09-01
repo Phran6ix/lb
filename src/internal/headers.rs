@@ -50,6 +50,7 @@ fn is_token_char(byte: &u8) -> bool {
         _ => false,
     }
 }
+//https://datatracker.ietf.org/doc/html/rfc9112#section-5
 pub fn parse_field_lines(bytes: &[u8]) -> Result<(Headers, usize), Error> {
     // Field line syntax -> field-name: field-value
     //
@@ -85,7 +86,6 @@ pub fn parse_field_lines(bytes: &[u8]) -> Result<(Headers, usize), Error> {
 
         // .all breaks if it encounters a false value
         let is_valid_field_name = field_name.iter().all(is_token_char);
-        println!("{is_valid_field_name}");
         if !is_valid_field_name {
             println!(
                 "Invalid field name {:?}",
@@ -111,8 +111,10 @@ pub fn parse_field_lines(bytes: &[u8]) -> Result<(Headers, usize), Error> {
             &field_name_value_str.trim().to_string(),
         );
 
-        read += field_line_idx + CRLF.len();
-        bytes_to_read = &bytes_to_read[field_line_idx + CRLF.len()..];
+        let total_read = field_line_idx + CRLF.len();
+
+        read += total_read;
+        bytes_to_read = &bytes_to_read[total_read..];
     }
     println!("DONE => {:?}", headers);
     Ok((headers, read))
