@@ -1,7 +1,8 @@
 use std::{
+    borrow::Cow,
     collections::HashMap,
-    fmt::{Debug},
-    io::{self, Write},
+    fmt::Debug,
+    io::{self, Error, Write},
 };
 
 //RESPONSE SCHEMATICS -> [start-line]CRLF[headers]CRLF[message-body]
@@ -108,6 +109,33 @@ impl Response {
     }
 }
 
+// Implementing status line parsing: https://datatracker.ietf.org/doc/html/rfc9112#section-4
+pub struct StatusLine<'a> {
+    pub version: Cow<'a, str>,
+    pub code: u16,
+    pub reason: Cow<'a, str>,
+}
+
+pub fn parse_status_line(b: &[u8]) -> StatusLine {
+    const SP: u8 = b' ';
+    let status_line_vec: Vec<&[u8]> = b.splitn(3, |s| *s == SP).collect();
+
+    let version = String::from_utf8_lossy(status_line_vec.get(0).copied().unwrap_or(b""));
+    let reason = String::from_utf8_lossy(status_line_vec.get(2).copied().unwrap_or(b""));
+    let code_byte = status_line_vec.get(1).copied().unwrap_or(b"502");
+
+    let code = std::str::from_utf8(code_byte)
+        .unwrap_or("502")
+        .parse::<u16>()
+        .unwrap_or(502);
+
+    return StatusLine {
+        version,
+        code,
+        reason,
+    };
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -150,5 +178,19 @@ mod test {
         assert!(output.contains("Test is Bad Request."));
         assert!(output.contains("HTTP/1.1"));
         assert!(output.contains("400 BAD REQUEST"));
+    }
+
+    #[test]
+    fn test_valid_status_line() {
+        let valid_status_line_bytes: &[u8] = b"HTTP 200 OK";
+        let status_line: StatusLine = parse_status_line(valid_status_line_bytes);
+
+        let version = status_line.version.into_owned();
+        let reason = status_line.reason.into_owned();
+        let code = status_line.code;
+
+        assert_eq!(version, "HTTP");
+        assert_eq!(reason, "OK");
+        assert_eq!(code, 200u16);
     }
 }

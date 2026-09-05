@@ -286,7 +286,7 @@ pub fn parse(request_data: &[u8]) -> Result<Request, Error> {
     Ok(request)
 }
 
-fn parse_request_line(b: &[u8]) -> Result<(RequestMethod, String, String, usize), Error> {
+pub fn parse_request_line(b: &[u8]) -> Result<(RequestMethod, String, String, usize), Error> {
     // split by white space
     // result = [method SP request-target SP HTTP-version]
     // since the bytes are in UTF-8 - we have to normalize them to strings

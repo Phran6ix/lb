@@ -15,10 +15,6 @@ pub fn parse_fixed_message(msg: &[u8], size: usize, body: &mut Vec<u8>) -> Resul
 
     let request_body = &msg[0..size];
 
-    if msg.len() < size {
-        return Err(Error::new(ErrorKind::InvalidData, "Waiting for Data.."));
-    };
-
     body.extend_from_slice(request_body);
 
     Ok(body.len())
